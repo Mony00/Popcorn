@@ -1,53 +1,6 @@
 import { useEffect, useState } from "react";
 import StarRating from "./StartRating";
 
-const tempMovieData = [
-  {
-    imdbID: "tt1375666",
-    Title: "Inception",
-    Year: "2010",
-    Poster:
-      "https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_SX300.jpg",
-  },
-  {
-    imdbID: "tt0133093",
-    Title: "The Matrix",
-    Year: "1999",
-    Poster:
-      "https://m.media-amazon.com/images/M/MV5BNzQzOTk3OTAtNDQ0Zi00ZTVkLWI0MTEtMDllZjNkYzNjNTc4L2ltYWdlXkEyXkFqcGdeQXVyNjU0OTQ0OTY@._V1_SX300.jpg",
-  },
-  {
-    imdbID: "tt6751668",
-    Title: "Parasite",
-    Year: "2019",
-    Poster:
-      "https://m.media-amazon.com/images/M/MV5BYWZjMjk3ZTItODQ2ZC00NTY5LWE0ZDYtZTI3MjcwN2Q5NTVkXkEyXkFqcGdeQXVyODk4OTc3MTY@._V1_SX300.jpg",
-  },
-];
-
-const tempWatchedData = [
-  {
-    imdbID: "tt1375666",
-    Title: "Inception",
-    Year: "2010",
-    Poster:
-      "https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_SX300.jpg",
-    runtime: 148,
-    imdbRating: 8.8,
-    userRating: 10,
-  },
-  {
-    imdbID: "tt0088763",
-    Title: "Back to the Future",
-    Year: "1985",
-    Poster:
-      "https://m.media-amazon.com/images/M/MV5BZmU0M2Y1OGUtZjIxNi00ZjBkLTg1MjgtOWIyNThiZWIwYjRiXkEyXkFqcGdeQXVyMTQxNzMzNDI@._V1_SX300.jpg",
-    runtime: 116,
-    imdbRating: 8.5,
-    userRating: 9,
-  },
-];
-
 const average = (arr) =>
   arr.reduce((acc, cur, i, arr) => acc + cur / arr.length, 0);
 
@@ -60,23 +13,6 @@ export default function App() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
-
-  // useEffect(function () {
-  //   console.log("After initial render");
-  // }, []);
-
-  // useEffect(function () {
-  //   console.log("After every render");
-  // });
-
-  // useEffect(
-  //   function () {
-  //     console.log("D");
-  //   },
-  //   [query]
-  // );
-
-  // console.log("During render");
 
   function handleSelectMovie(id) {
     setSelectedId((selectedId) => (id === selectedId ? null : id));
@@ -96,12 +32,15 @@ export default function App() {
 
   useEffect(
     function () {
+      const controller = new AbortController();
+
       async function fetchMovies() {
         try {
           setIsLoading(true);
           setError("");
           const res = await fetch(
-            `http://www.omdbapi.com/?apikey=${KEY}&s=${query}`
+            `http://www.omdbapi.com/?apikey=${KEY}&s=${query}`,
+            { signal: controller.signal }
           );
 
           if (!res.ok)
@@ -111,10 +50,13 @@ export default function App() {
           if (data.Response === "False") throw new Error("Movie not found");
 
           setMovies(data.Search);
-          console.log(data.Search);
+          setError("");
         } catch (err) {
-          // console.log(err.message);
           setError(err.message);
+
+          if (err.name === "AbortError") {
+            setError(err.message);
+          }
         } finally {
           // always executed
           setIsLoading(false);
@@ -126,7 +68,12 @@ export default function App() {
         setError("");
         return;
       }
+      handleCloseMovie();
       fetchMovies();
+      //cleanup function to avoid unnecesarry fetches of data
+      return function () {
+        controller.abort();
+      };
     },
     [query]
   );
@@ -141,7 +88,6 @@ export default function App() {
         {/* using composition to make reusable componets and to ease prop
         drilling with children - prefered way */}
         <Box>
-          {/* {isLoading ? <Loader /> : <MovieList movies={movies} />} */}
           {isLoading && <Loader />}
           {!isLoading && !error && (
             <MovieList movies={movies} onSelectMovie={handleSelectMovie} />
@@ -316,6 +262,22 @@ function SelectedMovie({
 
   useEffect(
     function () {
+      function callBack(e) {
+        if (e.code === "Escape") {
+          onCloseSelectedMovie();
+        }
+      }
+      document.addEventListener("keydown", callBack);
+
+      return function () {
+        document.removeEventListener("keydown", callBack);
+      };
+    },
+    [onCloseSelectedMovie]
+  );
+
+  useEffect(
+    function () {
       async function getMovieDetails() {
         setLoading(true);
         const res = await fetch(
@@ -328,6 +290,24 @@ function SelectedMovie({
       getMovieDetails();
     },
     [selectedId]
+  );
+
+  //executed whenewer a movie is selected
+  useEffect(
+    function () {
+      if (!title) return;
+      document.title = `Movie | ${title}`;
+
+      //cleanup fucntion
+      //to get back to usepopcorn when no movie is seleted
+      //executed whenever a movie is deselected the component (movie) is unmonted
+      //if the cleanup is not made the movie will be deselected but not cleaned up from the title
+      return function cleanup() {
+        document.title = "usePopcorn";
+        // console.log(`Clean up ${title}`);
+      };
+    },
+    [title]
   );
 
   return (
